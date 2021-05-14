@@ -1,0 +1,366 @@
+---
+title: "STI-County"
+author: "Jay Kim"
+date: "3/27/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("G:/My Drive/upSTI")
+library(janitor)
+library(readxl)
+gono <- read_excel("G:/My Drive/upSTI/dataset1.xlsx", 
+    sheet = "Gonorrhearate")
+
+library(readr)
+gono_df <- read_csv("G:/My Drive/upSTI/gono_df.csv")
+gono_df1 <- janitor::clean_names(gono_df) %>% filter( rate_per_100000 != "Data not available")
+
+summary_gono <-  gono_df1 %>%  
+ dplyr::summarise(meanrate=mean(rate_per_100000, na.rm=T))
+summary_gono
+
+anyNA(gono)
+length(unique(gono$Geography))
+gono$rate <- as.numeric(gono$`Rate_per _00000`)
+gono$fips <- gono$id2
+ rate1 <- gono$rate
+gono$rate1 <- log(rate1)
+hist(gono$rate)
+anyNA(gono$rate)
+str(gono$rate)
+```
+
+```{r}
+### USA map
+library(plotly)
+library(dplyr)
+library(usmap)
+states_df <- usmap::plot_usmap( )
+
+counties_df <- usmap::plot_usmap(regions = "counties")
+### using FIPS codes
+FL <- usmap::fips(state = "FL", county =  "Escambia")
+FL
+flip_fips <- usmap::fips_info(gono_df1$fips_2)
+head(flip_fips)
+
+
+library(rjson)
+
+#mapboxToken <- paste(readLines("../.mapbox_token"), collapse="")    # You need your own token
+#Sys.setenv("MAPBOX_TOKEN" = mapboxToken)
+
+url <- 'https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json'
+counties <- rjson::fromJSON(file=url)
+url2<- "https://raw.githubusercontent.com/plotly/datasets/master/fips-unemp-16.csv"
+df <- read.csv(url2, colClasses=c(fips="character"))
+ 
+
+gono_fips <- merge(gono_df1, flip_fips, by.x="fips_2", by.y="fips",all.x = T) %>% select(year, geography, "fips"=fips_2,"code"=abbr, rate_per_100000) %>%   
+  mutate(rate_per_100000 = as.numeric(rate_per_100000)) %>% as.data.frame() %>% 
+  mutate(hover = paste0(geography, "\n Rate:", rate_per_100000)) %>% 
+  filter( year == 2018)
+
+
+g <-  list(
+  scope = "usa",
+  projection = list( type = "albers usa"),
+  showlakes = TRUE,
+  lakecolor = toRGB("white")
+)
+
+rate2018_fig <- plot_ly()
+rate2018_fig <-  rate2018_fig %>% 
+  add_trace(
+    type = "choropleth",
+    geojson = counties,
+    locations = gono_fips$fips,
+     z = gono_fips$rate_per_100000,
+    colorscale = "Earth",
+    zmin = 0,
+    zmax = 2000,
+    marker = list(
+      line=list(width =0)
+    )
+  )
+rate2018_fig <- rate2018_fig %>% 
+  colorbar(
+    title = "Gonorrhea Rate (1/100,000)"
+  ) %>% 
+  layout(
+    title = "2018 US Gonorrhea Rate by County"
+  )
+
+rate2018_fig <- rate2018_fig %>% 
+  layout(
+    geo=g
+  ) %>%  config(displayModeBar =FALSE)
+
+rate2018_fig
+```
+
+
+
+
+
+```{r}
+library(readr)
+library(dplyr)
+library(janitor)
+poverty_re <- read_csv("G:/My Drive/upSTI/poverty_re.csv") 
+
+poverty1 <- janitor::row_to_names(poverty_re,1)
+poverty2 <- clean_names(poverty1)
+poverty2$id <- as.factor(poverty2$id)
+poverty2$geographic_area_name <- as.factor(poverty2$geographic_area_name)
+poverty3 <-  poverty2[ , c(3:371)] %>% mutate_if(is.character, as.numeric)
+
+poverty3$povertytotalrate <- poverty3$estimate
+
+poverty3$povertymale <-(poverty3$estimate_total_unrelated_individuals_for_whom_poverty_status_is_determined_male /            poverty3$estimate_total_unrelated_individuals_for_whom_poverty_status_is_determined)
+poverty3$povertyfemale <- (poverty3$estimate_total_unrelated_individuals_for_whom_poverty_status_is_determined_female / poverty3$estimate_total_unrelated_individuals_for_whom_poverty_status_is_determined)
+
+
+poverty3$povertyover16female <- 
+  as.numeric( poverty3$estimate_total_population_for_whom_poverty_status_is_determined_employment_status_civilian_labor_force_16_years_and_over_employed_female /poverty3$estimate_total_population_for_whom_poverty_status_is_determined_employment_status_civilian_labor_force_16_years_and_over )
+
+poverty3$povertyover16male <- 
+  as.numeric( poverty3$estimate_total_population_for_whom_poverty_status_is_determined_employment_status_civilian_labor_force_16_years_and_over_employed_male /poverty3$estimate_total_population_for_whom_poverty_status_is_determined_employment_status_civilian_labor_force_16_years_and_over )
+
+
+poverty3$povertyedu <-as.numeric( poverty3$estimate_below_poverty_level_population_for_whom_poverty_status_is_determined_educational_attainment_population_25_years_and_over / poverty3$estimate_below_poverty_level_population_for_whom_poverty_status_is_determined)
+
+poverty3$povertyfemaleunemployed <- as.numeric(poverty3$estimate_percent_below_poverty_level_population_for_whom_poverty_status_is_determined_employment_status_civilian_labor_force_16_years_and_over_unemployed_female)
+poverty3$povertymaleunemployed <- as.numeric(poverty3$estimate_percent_below_poverty_level_population_for_whom_poverty_status_is_determined_employment_status_civilian_labor_force_16_years_and_over_unemployed_male)
+
+
+poverty3$povertyage16to17 <-  ( poverty3$estimate_total_unrelated_individuals_for_whom_poverty_status_is_determined_16_to_17_years  / poverty3$estimate_total_unrelated_individuals_for_whom_poverty_status_is_determined )
+poverty3$povertyage18to24 <-  ( poverty3$estimate_total_unrelated_individuals_for_whom_poverty_status_is_determined_18_to_24_years  / poverty3$estimate_total_unrelated_individuals_for_whom_poverty_status_is_determined )
+poverty3$povertyage25to34 <-  ( poverty3$estimate_total_unrelated_individuals_for_whom_poverty_status_is_determined_25_to_34_years  / poverty3$estimate_total_unrelated_individuals_for_whom_poverty_status_is_determined )
+poverty3$povertyage35to44 <-  ( poverty3$estimate_total_unrelated_individuals_for_whom_poverty_status_is_determined_35_to_44_years / poverty3$estimate_total_unrelated_individuals_for_whom_poverty_status_is_determined )
+
+```
+
+
+
+```{r message=FALSE, warning=FALSE}
+#hist(sqrt(poverty3$estimate))
+
+library(readr)
+economic_re <- read_csv("G:/My Drive/upSTI/economic_re.csv")
+econo1 <- janitor::row_to_names(economic_re,1)
+econo2 <- clean_names(econo1)
+econo2$id <- as.factor(econo2$id)
+econo2$geographic_area_name <- as.factor(econo2$geographic_area_name)
+econo2 <-  econo2[ , c(3:552)] %>% mutate_if(is.character, as.numeric)
+
+
+econo2$employedfemalerate <-  (econo2$estimate_employment_status_females_16_years_and_over_in_labor_force_civilian_labor_force_employed / 
+                           econo2$estimate_employment_status_females_16_years_and_over)
+
+econo2$occupationssales <- econo2$estimate_occupation_civilian_employed_population_16_years_and_over_sales_and_office_occupations  / econo2$estimate_occupation_civilian_employed_population_16_years_and_over
+
+
+econo2$occupationsservice <- econo2$estimate_occupation_civilian_employed_population_16_years_and_over_service_occupations  / econo2$estimate_occupation_civilian_employed_population_16_years_and_over
+
+
+econo2$employedNoHI <- ( econo2$estimate_health_insurance_coverage_civilian_noninstitutionalized_population_civilian_noninstitutionalized_population_19_to_64_years_in_labor_force_employed_no_health_insurance_coverage / econo2$estimate_health_insurance_coverage_civilian_noninstitutionalized_population_civilian_noninstitutionalized_population_19_to_64_years )
+
+econo2$unemployedpublicHI <- ( econo2$estimate_health_insurance_coverage_civilian_noninstitutionalized_population_civilian_noninstitutionalized_population_19_to_64_years_in_labor_force_unemployed_with_health_insurance_coverage_with_public_coverage / econo2$estimate_health_insurance_coverage_civilian_noninstitutionalized_population_civilian_noninstitutionalized_population_19_to_64_years )
+econo2$est
+
+ 
+```
+
+
+```{r message=FALSE, warning=FALSE}
+agesex <- read_csv("G:/My Drive/upSTI/agesex_re.csv")
+age1 <- janitor::row_to_names(agesex,1)
+age2 <- clean_names(age1)
+age2$id <- as.factor(age2$id)
+age2$geographic_area_name <- as.factor(age2$geographic_area_name)
+age2 <-  age2[ , c(3:460)] %>% mutate_if(is.character, as.numeric)
+
+
+age2$medianagefemale <- age2$estimate_female_total_population_summary_indicators_median_age_years
+age2$medianagemale <- age2$estimate_male_total_population_summary_indicators_median_age_years
+age2$age15to19Female  <- age2$estimate_female_total_population_age_15_to_19_years / age2$estimate_female_total_population
+age2$age20to24Female  <- age2$estimate_female_total_population_age_20_to_24_years /  age2$estimate_female_total_population
+age2$age25to29Female  <- age2$estimate_female_total_population_age_25_to_29_years /  age2$estimate_female_total_population
+age2$age30to34Female  <- age2$estimate_female_total_population_age_30_to_34_years / age2$estimate_female_total_population
+age2$age15to19Male  <- age2$estimate_male_total_population_age_15_to_19_years / age2$estimate_male_total_population
+age2$age20to24Male  <- age2$estimate_male_total_population_age_20_to_24_years /  age2$estimate_male_total_population
+age2$age25to29Male  <- age2$estimate_male_total_population_age_25_to_29_years /  age2$estimate_male_total_population
+age2$age30to34Male  <- age2$estimate_male_total_population_age_30_to_34_years / age2$estimate_male_total_population
+
+
+ 
+
+#age2$age35to39  <- (age2$estimate_female_total_population_age_35_to_39_year  / age2$estimate_female_total_populations)
+
+``` 
+
+```{r message=FALSE, warning=FALSE}
+education <- read_csv("G:/My Drive/upSTI/education_re.csv")
+education0 <- janitor::row_to_names(education,1)
+education1 <- clean_names(education0)
+education1$id <- as.factor(education1$id)
+education1$geographic_area_name <- as.factor(education1$geographic_area_name)
+education1 <-  education1[ , c(3:772)] %>% mutate_if(is.character, as.numeric)
+
+education2  <- education1 %>% select(id,  contains("estimate_total_median_earnings"))
+education2$medianearnign <- as.numeric(education2$estimate_total_median_earnings_in_the_past_12_months_in_2018_inflation_adjusted_dollars_population_25_years_and_over_with_earnings)
+education2$lessHSearning <- as.numeric(education2$estimate_total_median_earnings_in_the_past_12_months_in_2018_inflation_adjusted_dollars_population_25_years_and_over_with_earnings_less_than_high_school_graduate)
+education2$HSearning <- as.numeric(education2$estimate_total_median_earnings_in_the_past_12_months_in_2018_inflation_adjusted_dollars_population_25_years_and_over_with_earnings_high_school_graduate_includes_equivalency)
+education2$Collegeearning <- as.numeric(education2$estimate_total_median_earnings_in_the_past_12_months_in_2018_inflation_adjusted_dollars_population_25_years_and_over_with_earnings_some_college_or_associates_degree)
+education2$Bearning <- as.numeric(education2$estimate_total_median_earnings_in_the_past_12_months_in_2018_inflation_adjusted_dollars_population_25_years_and_over_with_earnings_bachelors_degree)
+education2$profearning <- as.numeric(education2$estimate_total_median_earnings_in_the_past_12_months_in_2018_inflation_adjusted_dollars_population_25_years_and_over_with_earnings_graduate_or_professional_degree)
+
+
+```
+
+
+```{r}
+
+gono_pov <- merge(gono, poverty3, by="id", all.y = T) %>% select(id,rate, povertytotalrate,povertymale,povertyedu,povertyover16female,povertyover16male,
+                                                              povertyfemaleunemployed, povertymaleunemployed,povertyage16to17,povertyage18to24,povertyage25to34,
+                                                              povertyage35to44) %>% na.omit()
+
+
+gono_econo <- merge(gono_pov, econo2, by="id", all.y = T) %>%
+  select(id,rate, povertytotalrate,povertymale,povertyedu,povertyover16female,povertyover16male,
+                                                              povertyfemaleunemployed, povertymaleunemployed,povertyage16to17,povertyage18to24,povertyage25to34,
+                                                              povertyage35to44,employedfemalerate,employedNoHI,unemployedpublicHI,
+         occupationssales,
+         occupationsservice) %>% na.omit()
+
+
+gono_age <- merge(gono_econo, age2, by="id", all.y = T) %>% 
+  select(id, rate, povertytotalrate,povertymale,povertyedu,povertyover16female,povertyover16male,
+                                                              povertyfemaleunemployed, povertymaleunemployed,povertyage16to17,povertyage18to24,povertyage25to34,
+                                                              povertyage35to44 , occupationssales,
+         occupationsservice,employedfemalerate,employedNoHI,unemployedpublicHI,   medianagemale,medianagefemale,age15to19Female,age20to24Female,age25to29Female,age30to34Female, age15to19Male,age20to24Male,age25to29Male,age30to34Male) %>% na.omit()
+
+gono_edu <- merge(gono_age, education2, by="id", all = T)  %>% select(id, rate, povertytotalrate,povertymale,povertyedu,povertyover16female,povertyover16male,
+                                                              povertyfemaleunemployed, povertymaleunemployed,povertyage16to17,povertyage18to24,povertyage25to34,
+                                                              povertyage35to44 , occupationssales,
+         occupationsservice,employedfemalerate,employedNoHI,unemployedpublicHI,   medianagemale,medianagefemale,age15to19Female,age20to24Female,age25to29Female,age30to34Female, age15to19Male,age20to24Male,age25to29Male,age30to34Male, 
+                                                                lessHSearning,HSearning,Collegeearning,Collegeearning) %>% na.omit()
+
+
+```
+
+
+
+
+```{r}
+#glimpse(gono_edu)
+library(psych)
+#pairs.panels(gono_edu[c(  -1)], cex=1)
+colSums(is.na(gono_edu))
+write.csv(gono_edu, "v1_gono_df.csv")
+```
+
+### Modeling
+
+*LASSO (least absolute Shrinkage and selection operator regression in 10-fold cross-validation framework) - Improve model prediction (accuracy)
+*shrinkage
+  + avoid overfitting the model to the training data (multicollinearity)
+  + select only the most important predictor variables
+*regularization - reduce variance in parameter estimates
+*tuning parameters - alpha: mixing percentage(alpha =1)
+                    lambda: regularization tuning parameter (provide the simplest possible explanation)
+*optimize model accuracy with model parsimony
+* identifying optimal lambda 
+* performance metric: root mean-squared error(min.RMSE)/r-squared / mean-squared error (MSE)/ Cohen's kappa/ classification accuracy
+*model type selection
+  +OLS linear regression ~ linear LASSO Regression
+  +Binary logistic regression ~ logistic lasso regression
+*Cross-validation(10-fold cross-validation)
+*predictive analytics(predictive modeling)framework
+*80/20 random split(train/test)
+
+  
+
+```{r}
+library(readr)
+v1_gono_df <- read_csv("v1_gono_df.csv", 
+    col_types = cols(X1 = col_skip(), id = col_factor(levels = c())))
+#glimpse(v1_gono_df)
+library(mlbench)
+library(caret)
+library(glmnet)
+
+#lasso Regression : will ignore multicollinerity issue choose one varies 
+set.seed(1234)
+TrainingIndex <- createDataPartition(gono_edu$rate, p=0.8, list = FALSE) # give matrix
+TrainingSet <- gono_edu[TrainingIndex,] # Training Set
+TestingSet <- gono_edu[-TrainingIndex,]
+
+custom <- trainControl(method = "repeatedcv", number = 10, repeats = 5, verboseIter = T)
+set.seed(1234)
+lasso <- train(rate ~ ., TrainingSet[,-1], method="glmnet", tuneGrid = expand.grid(alpha = 1, lambda = seq(0.00001,2, length =5)), trControl = custom )
+lasso$bestTune
+lasso$bestTune$lambda
+lasso$finalModel$lambda
+round(coef(lasso$finalModel, lasso$bestTune$lambda), 3)
+lasso$resample
+summary(lm(rate ~ ., TrainingSet[,-1]))
+
+plot(lasso)
+plot(lasso$finalModel, xvar ="lambda", label = T)
+plot(lasso$finalModel, xvar ="dev", label = T)
+plot(log(lasso$results$lambda),
+     lasso$results$RMSE,
+     xlab="lambda",
+     ylab="RMSE",
+     xlim=c(0,1))
+library(ggplot2)
+ggplot(varImp(lasso, scale = F))
+p1 <- predict(lasso, TrainingSet, use = ifelse(na.rm, "complete.obs", "everything"))
+sqrt(mean((TrainingSet$rate - p1)^2))
+
+p2 <- predict(lasso, TestingSet,use = ifelse(na.rm, "complete.obs", "everything"))
+sqrt(mean((TestingSet$rate - p2)^2))
+
+RMSE(p1, TrainingSet$rate)
+RMSE(p2, TestingSet$rate)
+
+lassoDF <- data.frame(Dataset= c("Train", "Test"), RMSE= c(RMSE(p1, TrainingSet$rate),RMSE(p2, TestingSet$rate)), Rsquared = c(R2(p1, TrainingSet$rate), R2(p2, TestingSet$rate)))
+lassoDF #86.72699	0.50823695	62.79025	Fold10.Rep3
+
+```
+
+```{r}
+lasso$finalModel$tuneValue
+```
+
+
+#### STI Gonorrhea 2018 updateing the articles from 2018
+
+```{r}
+STI2018all <- read_csv("G:/My Drive/upSTI/DataState/STI2018all.csv")
+
+STI2018_female_age15_39 <- read_csv("DataState/STI2018_female_age15-39.csv")
+library(dplyr)
+glimpse(STI2018all)
+
+```
+
+
+```{r}
+library(highcharter)
+library(geojsonR)
+fig1 <- highchart() %>%  hc_title( text = "2018 USA Gonorrhea Rate (Female age 15 to 39)") %>% 
+                 hc_subtitle(text = "Source: Centers for Disease Controle and Prevention 2018") %>% 
+                hc_add_series_map(usgeojson, STI2018_female_age15_39,
+                                  name = "Geography",
+                                  value = "Rateper100000",
+                                  joinBy = c("woename","Geography" ))  %>% 
+                            hc_mapNavigation(enabled =T) %>% 
+                    hc_labels(style = list(left="1500%", top="150%"))
+fig1
+```
+
